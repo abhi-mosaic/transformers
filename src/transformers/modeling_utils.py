@@ -2956,7 +2956,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 device_map = {"": device_map}
 
-        if device_map is not None:
+        dbrx_split_expert_weights = False
+        if hasattr(config, 'ffn_config') and hasattr(config.ffn_config, 'split_expert_weights') and config.ffn_config.split_expert_weights:
+            dbrx_split_expert_weights = True
+
+        if not dbrx_split_expert_weights and device_map is not None:
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
             elif not low_cpu_mem_usage:
@@ -3550,6 +3554,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise
         elif from_pt:
             # restore default dtype
+            if dbrx_split_expert_weights:
+                model.dbrx_split_expert_weights = dbrx_split_expert_weights
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
             (
@@ -3835,7 +3841,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                     model.apply(model._initialize_weights)
             else:
-                model.apply(model._initialize_weights)
+                if hasattr(model, 'dbrx_split_expert_weights') and model.dbrx_split_expert_weights:
+                    pass
+                else:
+                    model.apply(model._initialize_weights)
 
         # Set some modules to fp32 if any
         if keep_in_fp32_modules is not None:
